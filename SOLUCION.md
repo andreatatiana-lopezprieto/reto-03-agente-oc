@@ -126,7 +126,7 @@ sequenceDiagram
 | **Por qué** | Es una prueba puntual, no una operación continua: se priorizó un costo de **US$0** y no requerir tarjeta. El adaptador es compatible con "chat completions", así que no hizo falta código nuevo |
 | **Proveedores ya soportados** | `anthropic` (por defecto `claude-sonnet-5-5`) y `openai` (también cualquier API compatible vía `LLM_BASE_URL`). Cambiar de proveedor es cambiar variables de entorno; el ciclo no se toca (el adaptador cumple la interfaz `enviar(mensajes, herramientas)`) |
 | **Por qué un modelo "Flash" alcanza** | La tarea no requiere razonamiento profundo: el modelo elige 3–4 herramientas en secuencia y redacta una tabla. Los números y las decisiones salen de código |
-| **Riesgo de la capa gratuita** | Límite de solicitudes por minuto (del orden de 10 RPM según fuentes comunitarias; el real se consulta en AI Studio). Un turno hace 3–5 llamadas al modelo, así que una ráfaga puede recibir un 429. El ciclo lo muestra en el chat sin matar la sesión y basta reintentar |
+| **Riesgo de la capa gratuita** | Límite de solicitudes por minuto (del orden de 10 RPM según fuentes comunitarias; el real se consulta en AI Studio). Un turno hace 3–5 llamadas al modelo, así que una ráfaga puede recibir un 429. El adaptador reintenta automáticamente (2 veces, con espera de 1,5 s y 4 s) ante 429 y errores 5xx transitorios; si persiste, el ciclo lo muestra en el chat sin matar la sesión. Como respaldo, la página incluye el botón «Ejecutar verificación sin modelo» (ver sección 10), que no depende del proveedor |
 | **Datos** | Todos los datos son ficticios (fixtures). En capa gratuita los datos pueden usarse para mejorar el producto del proveedor; con datos reales de Periferia se usaría un plan de pago con retención cero |
 
 ### Costo estimado por caso procesado
@@ -325,6 +325,7 @@ Cambio necesario en la interfaz: `crearOrden` debería poder devolver un estado 
 | **HU-6** Errores | **Hecho** | JSON malformado, monto no numérico, caso inexistente, nombre inválido (`../etc`), herramienta desconocida y argumentos inválidos → `{ ok: false, error }` legible | — |
 | Front de chat | **Hecho** | Tarjetas de tool calls (ok / error / requiere confirmación), indicador «pensando», bloque resaltado con botones Confirmo / No confirmo | Streaming (opcional) |
 | `demo.ts` | **Hecho** | 6 casos, idempotencia, confirmación de `sol-004`; termina con código 0 sin clave | — |
+| Verificación sin modelo en línea | **Hecho** | Botón «▶ Ejecutar verificación sin modelo (6 casos)» en el chat, servido por `GET /api/demo` (`src/demo-web.ts`): ejecuta las mismas herramientas que `demo.ts` sobre un directorio temporal aislado, así los evaluadores pueden probar los 6 casos, la idempotencia y las confirmaciones desde el enlace aunque el proveedor del modelo esté saturado o sin cuota | Protegerlo con autenticación y límite de uso más estricto |
 | Enlace público | **Pendiente de despliegue** | `Dockerfile` listo | Ver README |
 | Bonus `modulo/` | **No hecho** | — | Empaquetar `agent.md`, `tools/oc.ts` y `skill/` reutilizando los mismos archivos |
 
@@ -342,7 +343,7 @@ Cambio necesario en la interfaz: `crearOrden` debería poder devolver un estado 
 
 **Cómo se verificó lo que propuso la IA** (no se aceptó por fe): `typecheck` sin errores; `demo.ts` con aserciones sobre los 6 casos; `verificar-agente.ts` con un LLM guionado que ataca las guardas; pruebas con casos mutados para los controles que ningún fixture dispara (RC1 inactivo, RC3, RC4, RC9, RC10, RC11); y pruebas de entradas hostiles (JSON roto, tipos incorrectos, `../etc`).
 
-**Revisé los controles RC1–RC10 contra el PRD y probé `demo.ts` y `verificar-agente.ts` antes de aceptar el código. Adapté el despliegue a capas gratuitas (Gemini en AI Studio y Render) en lugar de un proveedor de pago, porque es una prueba puntual para Periferia IT Group y no una operación continua.**
+**Qué se descartó de lo propuesto y por qué:** Revisé los controles RC1–RC10 contra el PRD y probé `demo.ts` y `verificar-agente.ts` antes de aceptar el código. Adapté el despliegue a capas gratuitas (Gemini en AI Studio y Render) en lugar de un proveedor de pago, porque es una prueba puntual para Periferia IT Group y no una operación continua.
 
 **Responsabilidad:** el candidato debe poder explicar cada línea del repositorio. Los puntos que conviene dominar para la defensa: la guarda de confirmación (`guardaConfirmacion` y `esConfirmacion`), la comparación `canon()` del payload y la función pura `validar`.
 
