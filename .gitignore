@@ -151,6 +151,9 @@ vite.config.ts.timestamp-*
 # Turbo Repo (https://turborepo.dev/)
 .turbo
 
+out/
+.env
+.DS_Store
 # Nx (https://nx.dev/)
 .nx/cache
 .nx/workspace-data
