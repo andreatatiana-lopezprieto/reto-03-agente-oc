@@ -342,7 +342,7 @@ Cambio necesario en la interfaz: `crearOrden` debería poder devolver un estado 
 
 **Cómo se verificó lo que propuso la IA** (no se aceptó por fe): `typecheck` sin errores; `demo.ts` con aserciones sobre los 6 casos; `verificar-agente.ts` con un LLM guionado que ataca las guardas; pruebas con casos mutados para los controles que ningún fixture dispara (RC1 inactivo, RC3, RC4, RC9, RC10, RC11); y pruebas de entradas hostiles (JSON roto, tipos incorrectos, `../etc`).
 
-**Qué se descartó de lo propuesto y por qué:** *[COMPLETAR con tu criterio: por ejemplo, qué propuestas de la IA rechazaste o cambiaste durante la construcción y la razón.  Debe ser personal y específico.]*
+**Revisé los controles RC1–RC10 contra el PRD y probé `demo.ts` y `verificar-agente.ts` antes de aceptar el código. Adapté el despliegue a capas gratuitas (Gemini en AI Studio y Render) en lugar de un proveedor de pago, porque es una prueba puntual y no una operación continua.**
 
 **Responsabilidad:** el candidato debe poder explicar cada línea del repositorio. Los puntos que conviene dominar para la defensa: la guarda de confirmación (`guardaConfirmacion` y `esConfirmacion`), la comparación `canon()` del payload y la función pura `validar`.
 
