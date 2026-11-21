@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agente de Órdenes de Compra · SAP</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --txt:#1c2330; --mut:#667085; --brd:#e3e6ec; --pri:#0b6b3a; --usr:#e8f3ec; --warn:#fff4d6; --warnb:#e0a800; --err:#fde8e8; --errb:#d33; --ok:#e7f6ec; --okb:#2a9d5c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1b212b; --txt:#e8ecf2; --mut:#9aa6b8; --brd:#2b3442; --pri:#3fbf78; --usr:#1d3a2b; --warn:#3b3214; --warnb:#c79a1a; --err:#3d1b1b; --errb:#e06060; --ok:#17301f; --okb:#3fbf78; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); height:100vh; display:flex; flex-direction:column; }
+  header { padding:12px 16px; border-bottom:1px solid var(--brd); background:var(--card); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; } header small { color:var(--mut); }
+  #chat { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:860px; width:100%; margin:0 auto; padding:10px 14px; border-radius:12px; border:1px solid var(--brd); background:var(--card); overflow-x:auto; }
+  .msg.user { background:var(--usr); } .msg .rol { font-size:12px; color:var(--mut); margin-bottom:4px; }
+  .msg table { border-collapse:collapse; margin:8px 0; font-size:13px; } .msg th,.msg td { border:1px solid var(--brd); padding:4px 8px; text-align:left; }
+  .msg ul { margin:6px 0; padding-left:20px; } .msg code { background:var(--bg); padding:1px 4px; border-radius:4px; }
+  .tool { margin:8px 0; border:1px solid var(--brd); border-left:4px solid var(--okb); background:var(--ok); border-radius:8px; padding:6px 10px; font-size:13px; }
+  .tool.err { border-left-color:var(--errb); background:var(--err); } .tool.conf { border-left-color:var(--warnb); background:var(--warn); }
+  .tool summary { cursor:pointer; font-weight:600; } .tool pre { white-space:pre-wrap; word-break:break-word; margin:6px 0 0; font-size:12px; }
+  .confirm { margin:10px 0 0; padding:10px 12px; border:2px solid var(--warnb); background:var(--warn); border-radius:10px; }
+  .confirm strong { display:block; margin-bottom:6px; } .confirm button { margin-right:8px; }
+  #pensando { display:none; max-width:860px; width:100%; margin:0 auto; color:var(--mut); font-style:italic; }
+  form { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--brd); background:var(--card); max-width:100%; }
+  textarea { flex:1; resize:none; height:48px; padding:10px; border-radius:10px; border:1px solid var(--brd); background:var(--bg); color:var(--txt); font:inherit; }
+  button { background:var(--pri); color:#fff; border:0; border-radius:10px; padding:0 16px; font:inherit; cursor:pointer; min-height:36px; } button:disabled { opacity:.5; cursor:default; } button.sec { background:transparent; color:var(--txt); border:1px solid var(--brd); }
+  .chips { max-width:860px; margin:0 auto; display:flex; gap:8px; flex-wrap:wrap; } .chips button { background:var(--card); color:var(--txt); border:1px solid var(--brd); padding:6px 12px; font-size:13px; }
+</style>
+</head>
+<body>
+<header><h1>Agente de Órdenes de Compra · SAP simulado</h1><small id="estado">conectando…</small></header>
+<main id="chat">
+  <div class="chips" id="chips">
+    <button class="sec" data-p="Procesa la solicitud &quot;sol-001&quot;.">Procesar sol-001 (flujo normal)</button>
+    <button class="sec" data-p="Procesa la solicitud &quot;sol-004&quot;. Muéstrame la OC como quedaría en SAP, qué validaciones pasó y cuáles no, y no la crees hasta que yo lo confirme.">sol-004 (demo del PRD)</button>
+    <button class="sec" data-p="Procesa la solicitud &quot;sol-005&quot;.">sol-005 (retroactiva)</button>
+    <button class="sec" data-p="Procesa la solicitud &quot;sol-003&quot;.">sol-003 (bloqueo)</button>
+  </div>
+</main>
+<div id="pensando">El agente está pensando…</div>
+<form id="f"><textarea id="m" placeholder="Escribe, por ejemplo: Procesa la solicitud sol-004" maxlength="2000"></textarea><button id="b" type="submit">Enviar</button></form>
+<script>
+const sessionId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9_-]/g, "");
+const chat = document.getElementById("chat"), m = document.getElementById("m"), b = document.getElementById("b"), pens = document.getElementById("pensando");
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function inline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>"); }
+function md(texto) {
+  const lineas = String(texto).split("\n"); let html = "", i = 0;
+  while (i < lineas.length) {
+    const l = lineas[i];
+    if (/^\s*\|.*\|\s*$/.test(l)) {
+      const filas = []; while (i < lineas.length && /^\s*\|.*\|\s*$/.test(lineas[i])) filas.push(lineas[i++]);
+      const celdas = f => f.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      const cuerpo = filas.filter(f => !/^\s*\|[\s:|-]+\|\s*$/.test(f));
+      html += "<table>" + cuerpo.map((f, k) => "<tr>" + celdas(f).map(c => (k === 0 ? "<th>" : "<td>") + inline(c) + (k === 0 ? "</th>" : "</td>")).join("") + "</tr>").join("") + "</table>"; continue;
+    }
+    if (/^\s*[-*]\s+/.test(l)) { let li = ""; while (i < lineas.length && /^\s*[-*]\s+/.test(lineas[i])) li += "<li>" + inline(lineas[i++].replace(/^\s*[-*]\s+/, "")) + "</li>"; html += "<ul>" + li + "</ul>"; continue; }
+    html += l.trim() ? "<p style='margin:6px 0'>" + inline(l.replace(/^#+\s*/, "")) + "</p>" : ""; i++;
+  }
+  return html;
+}
+
+function tarjetaTool(t) {
+  const d = document.createElement("details"); d.className = "tool" + (t.requiereConfirmacion ? " conf" : t.ok ? "" : " err");
+  d.innerHTML = "<summary>" + (t.requiereConfirmacion ? "⚠️ " : t.ok ? "🔧 " : "⛔ ") + esc(t.nombre) + " — " + (t.requiereConfirmacion ? "requiere confirmación" : t.ok ? "ok" : "error") + "</summary><pre>args: " + esc(JSON.stringify(t.args, null, 2).slice(0, 1500)) + "\nresultado: " + esc(t.resumen) + "</pre>";
+  return d;
+}
+function agregar(rol, texto, tools, confirmar) {
+  const d = document.createElement("div"); d.className = "msg " + rol;
+  d.innerHTML = "<div class='rol'>" + (rol === "user" ? "Tú" : "Agente") + "</div>";
+  (tools || []).forEach(t => d.appendChild(tarjetaTool(t)));
+  const c = document.createElement("div"); c.innerHTML = rol === "user" ? esc(texto).replace(/\n/g, "<br>") : md(texto); d.appendChild(c);
+  if (confirmar) {
+    const q = document.createElement("div"); q.className = "confirm";
+    q.innerHTML = "<strong>⚠️ El agente espera tu confirmación para continuar</strong>";
+    const si = Object.assign(document.createElement("button"), { textContent: "Confirmo" }), no = Object.assign(document.createElement("button"), { textContent: "No confirmo", className: "sec" });
+    si.onclick = () => { q.remove(); enviar("Confirmo."); }; no.onclick = () => { q.remove(); enviar("No confirmo, no crees la OC."); };
+    q.append(si, no); d.appendChild(q);
+  }
+  chat.appendChild(d); d.scrollIntoView({ block: "end" });
+}
+async function enviar(texto) {
+  if (!texto.trim() || b.disabled) return;
+  document.getElementById("chips")?.remove();
+  agregar("user", texto); m.value = ""; b.disabled = true; pens.style.display = "block"; chat.appendChild(pens); pens.scrollIntoView({ block: "end" });
+  try {
+    const r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId, message: texto }) });
+    const j = await r.json();
+    if (!r.ok) agregar("assistant", "⚠️ " + (j.error || "Error del servidor"));
+    else agregar("assistant", j.reply, j.toolCalls, j.needsConfirmation);
+  } catch { agregar("assistant", "⚠️ No se pudo contactar el servidor. Intenta de nuevo."); }
+  finally { b.disabled = false; pens.style.display = "none"; m.focus(); }
+}
+document.getElementById("f").addEventListener("submit", e => { e.preventDefault(); enviar(m.value); });
+m.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(m.value); } });
+document.querySelectorAll("#chips button").forEach(x => x.onclick = () => enviar(x.dataset.p));
+fetch("/api/health").then(r => r.json()).then(h => { document.getElementById("estado").textContent = h.provider === "none" ? "sin modelo configurado" : h.provider + " · " + h.model; }).catch(() => { document.getElementById("estado").textContent = "sin conexión"; });
+</script>
+</body>
+</html>

@@ -1,11 +1,15 @@
 {
   "name": "reto-03-agente-oc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "bun run src/server.ts",
+    "start": "bun run src/server.ts",
+    "start:node": "node --env-file=.env --experimental-strip-types src/server.ts",
     "demo": "bun run demo.ts",
     "demo:node": "node --experimental-strip-types demo.ts",
+    "verificar": "bun run verificar-agente.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
