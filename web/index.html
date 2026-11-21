@@ -36,6 +36,7 @@
     <button class="sec" data-p="Procesa la solicitud &quot;sol-004&quot;. Muéstrame la OC como quedaría en SAP, qué validaciones pasó y cuáles no, y no la crees hasta que yo lo confirme.">sol-004 (demo del PRD)</button>
     <button class="sec" data-p="Procesa la solicitud &quot;sol-005&quot;.">sol-005 (retroactiva)</button>
     <button class="sec" data-p="Procesa la solicitud &quot;sol-003&quot;.">sol-003 (bloqueo)</button>
+    <button class="sec" id="demo">▶ Ejecutar verificación sin modelo (6 casos)</button>
   </div>
 </main>
 <div id="pensando">El agente está pensando…</div>
@@ -95,7 +96,25 @@ async function enviar(texto) {
 }
 document.getElementById("f").addEventListener("submit", e => { e.preventDefault(); enviar(m.value); });
 m.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(m.value); } });
-document.querySelectorAll("#chips button").forEach(x => x.onclick = () => enviar(x.dataset.p));
+document.querySelectorAll("#chips button[data-p]").forEach(x => x.onclick = () => enviar(x.dataset.p));
+document.getElementById("demo").onclick = async () => {
+  document.getElementById("chips")?.remove(); b.disabled = true; pens.textContent = "Ejecutando los 6 casos sin modelo…"; pens.style.display = "block"; chat.appendChild(pens);
+  try {
+    const r = await fetch("/api/demo"); const j = await r.json();
+    if (!r.ok) { agregar("assistant", "⚠️ " + (j.error || "Error del servidor")); return; }
+    const si = v => v ? "sí" : "no", cod = h => h.length ? h.map(x => x.codigo).join(", ") : "—";
+    let t = "**Verificación sin modelo: las mismas herramientas que usa el agente, ejecutadas de forma determinista**\n\n| Caso | Apta | Bloqueos | Confirmaciones | Retroactiva | Resultado |\n|---|---|---|---|---|---|\n";
+    j.casos.forEach(c => { t += "| " + c.caso + " | " + si(c.apta) + " | " + cod(c.bloqueos) + " | " + cod(c.confirmaciones) + " | " + si(c.retroactiva) + " | " + c.resultado + " |\n"; });
+    t += "\n**Detalle de hallazgos**\n";
+    j.casos.forEach(c => { c.bloqueos.concat(c.confirmaciones).forEach(h => { t += "- **" + c.caso + " · " + h.codigo + ":** " + h.detalle + "\n"; }); });
+    t += "\n**Idempotencia:** " + j.idempotencia + "\n\n**Comprobaciones**\n";
+    j.verificaciones.forEach(v => { t += "- " + (v.ok ? "✅" : "❌") + " " + v.texto + "\n"; });
+    t += "\n**Log de control (out/control.csv)**\n";
+    j.control.split("\n").slice(1).forEach(l => { t += "- " + l + "\n"; });
+    agregar("assistant", t);
+  } catch { agregar("assistant", "⚠️ No se pudo ejecutar la verificación. Intenta de nuevo."); }
+  finally { b.disabled = false; pens.style.display = "none"; pens.textContent = "El agente está pensando…"; }
+};
 fetch("/api/health").then(r => r.json()).then(h => { document.getElementById("estado").textContent = h.provider === "none" ? "sin modelo configurado" : h.provider + " · " + h.model; }).catch(() => { document.getElementById("estado").textContent = "sin conexión"; });
 </script>
 </body>

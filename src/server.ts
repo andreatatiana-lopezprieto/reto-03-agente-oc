@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { z } from "zod"
 import { nuevaSesion, procesarTurno, type ConfigAgente, type Sesion } from "./agente.ts"
+import { ejecutarDemo } from "./demo-web.ts"
 import { crearLlm } from "./llm/index.ts"
 
 const directorio = fileURLToPath(new URL("..", import.meta.url))
@@ -51,6 +52,12 @@ function limitado(ip: string): boolean {
   return recientes.length > LIMITE.max
 }
 
+async function demo(req: IncomingMessage, res: ServerResponse) {
+  const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "?").split(",")[0]?.trim() ?? "?"
+  if (limitado(ip)) return json(res, 429, { error: "Demasiadas solicitudes. Espera unos minutos e intenta de nuevo." })
+  json(res, 200, await ejecutarDemo(directorio))
+}
+
 async function chat(req: IncomingMessage, res: ServerResponse) {
   const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "?").split(",")[0]?.trim() ?? "?"
   if (limitado(ip)) return json(res, 429, { error: "Demasiadas solicitudes. Espera unos minutos e intenta de nuevo." })
@@ -73,6 +80,7 @@ const servidor = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost")
     if (req.method === "GET" && url.pathname === "/api/health") return json(res, 200, { ok: true, provider: llm?.proveedor ?? "none", model: llm?.modelo ?? null })
     if (req.method === "POST" && url.pathname === "/api/chat") return await chat(req, res)
+    if (req.method === "GET" && url.pathname === "/api/demo") return await demo(req, res)
     const m = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{8,64})$/)
     if (req.method === "GET" && m?.[1]) {
       const s = sesiones.get(m[1])

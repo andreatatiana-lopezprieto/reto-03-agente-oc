@@ -24,25 +24,35 @@ export interface LlmAdapter {
 
 export const TIMEOUT_MS = 60_000
 
-/** Convierte fallos de red/HTTP en mensajes claros. Nunca incluye la clave. */
+const REINTENTABLES = new Set([429, 500, 502, 503, 504])
+const ESPERAS_MS = [1500, 4000]
+const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Convierte fallos de red/HTTP en mensajes claros. Nunca incluye la clave. Reintenta 2 veces ante 429/5xx transitorios. */
 export async function llamarJson(url: string, init: RequestInit, proveedor: string): Promise<unknown> {
-  let res: Response
-  try {
-    res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) })
-  } catch (e) {
-    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
-      throw new Error(`El proveedor del modelo (${proveedor}) tardó más de ${TIMEOUT_MS / 1000} s en responder. Intenta de nuevo.`)
+  for (let intento = 0; ; intento++) {
+    let res: Response
+    try {
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) })
+    } catch (e) {
+      if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+        throw new Error(`El proveedor del modelo (${proveedor}) tardó más de ${TIMEOUT_MS / 1000} s en responder. Intenta de nuevo.`)
+      }
+      throw new Error(`No se pudo conectar con el proveedor del modelo (${proveedor}).`)
     }
-    throw new Error(`No se pudo conectar con el proveedor del modelo (${proveedor}).`)
-  }
-  const texto = await res.text()
-  if (!res.ok) {
+    const texto = await res.text()
+    if (res.ok) return JSON.parse(texto)
+    const espera = ESPERAS_MS[intento]
+    if (REINTENTABLES.has(res.status) && espera !== undefined) {
+      await pausa(espera)
+      continue
+    }
     let detalle = texto.slice(0, 300)
     try {
-      const j = JSON.parse(texto) as { error?: { message?: string } }
-      detalle = j.error?.message ?? detalle
+      const j = JSON.parse(texto) as { error?: { message?: string } } | { error?: { message?: string } }[]
+      const e = Array.isArray(j) ? j[0]?.error : j.error
+      detalle = e?.message ?? detalle
     } catch { /* texto plano */ }
-    throw new Error(`El proveedor del modelo (${proveedor}) respondió ${res.status}: ${detalle}`)
+    throw new Error(`El proveedor del modelo (${proveedor}) respondió ${res.status}: ${detalle}. Si es un error de saturación o de límite, espera unos segundos y reintenta; también puedes usar el botón «Ejecutar verificación sin modelo».`)
   }
-  return JSON.parse(texto)
 }
